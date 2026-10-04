@@ -1,0 +1,282 @@
+--[[
+    Doors Script for Delta (Mobile - Safe Auto Grab Edition)
+    - Безопасный авто-сбор предметов без случайного посаживания на стулья/кресла
+    - Вкладки: Предметы, 100 комната, 50 комната, Сик/Фигура, Защита и ESP
+    - Передвигаемое окно + плавающая кнопка MENU
+--]]
+
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+
+local Window = Fluent:CreateWindow({
+    Title = "Doors Mobile",
+    SubTitle = "Delta Safe Grab",
+    TabWidth = 140,
+    Size = UDim2.fromOffset(470, 320),
+    Theme = "Dark"
+})
+
+local Tabs = {
+    Items = Window:AddTab({ Title = "Предметы", Icon = "package" }),
+    Room100 = Window:AddTab({ Title = "Комната 100", Icon = "zap" }),
+    Library = Window:AddTab({ Title = "Комната 50", Icon = "book" }),
+    Bosses = Window:AddTab({ Title = "Сик / Фигура", Icon = "shield" }),
+    God = Window:AddTab({ Title = "Защита", Icon = "user-check" }),
+    Visuals = Window:AddTab({ Title = "ESP", Icon = "eye" })
+}
+
+-- [ ПЛАВАЮЩАЯ КНОПКА MENU ]
+local ScreenGui = Instance.new("ScreenGui")
+local ToggleBtn = Instance.new("TextButton")
+local UICorner = Instance.new("UICorner")
+
+ScreenGui.Name = "DeltaDoorsToggle"
+ScreenGui.Parent = game.CoreGui
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+ToggleBtn.Name = "ToggleButton"
+ToggleBtn.Parent = ScreenGui
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+ToggleBtn.Position = UDim2.new(0.05, 0, 0.15, 0)
+ToggleBtn.Size = UDim2.new(0, 45, 0, 45)
+ToggleBtn.Font = Enum.Font.SourceSansBold
+ToggleBtn.Text = "MENU"
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleBtn.TextSize = 12.000
+ToggleBtn.Active = true
+ToggleBtn.Draggable = true
+
+UICorner.CornerRadius = UDim2.new(0, 22)
+UICorner.Parent = ToggleBtn
+
+local menuVisible = true
+ToggleBtn.MouseButton1Click:Connect(function()
+    menuVisible = not menuVisible
+    if Fluent.GUI then
+        Fluent.GUI.Enabled = menuVisible
+    end
+end)
+
+-- [ ФУНКЦИЯ ПРОВЕРКИ: КРЕСЛО ИЛИ СТУЛ ]
+local function isBlacklistedSeat(instance)
+    if not instance then return false end
+    
+    -- Проверка на класс сиденья Roblox
+    if instance:IsA("Seat") or instance:IsA("VehicleSeat") then
+        return true
+    end
+    
+    -- Проверка по имени объекта и родительских моделей
+    local name = instance.Name:lower()
+    local parentName = instance.Parent and instance.Parent.Name:lower() or ""
+    
+    local seatKeywords = {"chair", "seat", "sofa", "couch", "bench", "кресло", "стул", "диван"}
+    
+    for _, keyword in ipairs(seatKeywords) do
+        if name:find(keyword) or parentName:find(keyword) then
+            return true
+        end
+    end
+    
+    return false
+end
+
+-- [ АВТО-СБОР ПРЕДМЕТОВ С ИСКЛЮЧЕНИЕМ КРЕСЕЛ ]
+local SafeAutoGrab = Tabs.Items:AddToggle("SafeAutoGrab", {Title = "Безопасный авто-сбор (Без посадки)", Default = true})
+task.spawn(function()
+    while task.wait(0.2) do
+        if Fluent.Toggles.SafeAutoGrab.Value then
+            local char = game.Players.LocalPlayer.Character
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                for _, prompt in pairs(workspace:GetDescendants()) do
+                    if prompt:IsA("ProximityPrompt") then
+                        local parent = prompt.Parent
+                        
+                        -- Игнорируем сиденья и стулья
+                        if parent and not isBlacklistedSeat(parent) and not isBlacklistedSeat(parent.Parent) then
+                            -- Список разрешенных для подбора предметов
+                            local itemName = parent.Name
+                            local validItems = {
+                                "Lighter", "Flashlight", "Lockpick", "Crucifix", 
+                                "Vitamins", "Bandage", "Key", "KeyFront", "Battery", "Candle"
+                            }
+                            
+                            local isValid = false
+                            for _, item in ipairs(validItems) do
+                                if itemName == item or parent:FindFirstChild(item) then
+                                    isValid = true
+                                    break
+                                end
+                            end
+                            
+                            if isValid then
+                                local dist = (char.HumanoidRootPart.Position - parent:GetPivot().Position).Magnitude
+                                if dist <= prompt.MaxActivationDistance + 5 then
+                                    fireproximityprompt(prompt)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- [ АВТО-СБОР МОНЕТ И ЗОЛОТА ]
+local AutoGold = Tabs.Items:AddToggle("AutoGold", {Title = "Авто-сбор монет и золота", Default = true})
+task.spawn(function()
+    while task.wait(0.3) do
+        if Fluent.Toggles.AutoGold.Value then
+            local char = game.Players.LocalPlayer.Character
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                for _, prompt in pairs(workspace:GetDescendants()) do
+                    if prompt:IsA("ProximityPrompt") then
+                        local parent = prompt.Parent
+                        if parent and (parent.Name == "GoldPile" or parent.Name == "Gold" or parent.Name == "Coin") then
+                            if not isBlacklistedSeat(parent) and not isBlacklistedSeat(parent.Parent) then
+                                local dist = (char.HumanoidRootPart.Position - parent:GetPivot().Position).Magnitude
+                                if dist <= 15 then
+                                    fireproximityprompt(prompt)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- [ КОМНАТА 100 ]
+local Room100Folder = Instance.new("Folder", game.CoreGui)
+Room100Folder.Name = "Doors100ESP"
+
+local function highlight100(instance, color)
+    if not instance or instance:FindFirstChild("FuseHighlight") then return end
+    local hl = Instance.new("Highlight")
+    hl.Name = "FuseHighlight"
+    hl.FillColor = color
+    hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+    hl.FillTransparency = 0.3
+    hl.Adornee = instance
+    hl.Parent = Room100Folder
+end
+
+local FuseESPToggle = Tabs.Room100:AddToggle("FuseESPToggle", {Title = "Подсветка предохранителей и щитка", Default = true})
+FuseESPToggle:OnChanged(function(Value)
+    if not Value then
+        Room100Folder:ClearAllChildren()
+    else
+        task.spawn(function()
+            while Fluent.Toggles.FuseESPToggle.Value do
+                for _, obj in pairs(workspace:GetDescendants()) do
+                    if obj.Name == "Fuse" or obj.Name == "LiveFuse" then
+                        highlight100(obj, Color3.fromRGB(0, 255, 255))
+                    elseif obj.Name == "ElectricCabinet" or obj.Name == "ElevatorBreaker" then
+                        highlight100(obj, Color3.fromRGB(0, 255, 0))
+                    end
+                end
+                task.wait(2)
+            end
+        end)
+    end
+end)
+
+-- [ КОМНАТА 50 ]
+local BookFolder = Instance.new("Folder", game.CoreGui)
+BookFolder.Name = "DoorsBookESP"
+
+local function highlightBook(instance, color)
+    if not instance or instance:FindFirstChild("BookHighlight") then return end
+    local hl = Instance.new("Highlight")
+    hl.Name = "BookHighlight"
+    hl.FillColor = color
+    hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+    hl.FillTransparency = 0.3
+    hl.Adornee = instance
+    hl.Parent = BookFolder
+end
+
+local BookESPToggle = Tabs.Library:AddToggle("BookESPToggle", {Title = "Подсветка Книг и Листка (50 комната)", Default = true})
+BookESPToggle:OnChanged(function(Value)
+    if not Value then
+        BookFolder:ClearAllChildren()
+    else
+        task.spawn(function()
+            while Fluent.Toggles.BookESPToggle.Value do
+                for _, obj in pairs(workspace:GetDescendants()) do
+                    if obj.Name == "LiveHintBook" then
+                        highlightBook(obj, Color3.fromRGB(255, 215, 0))
+                    elseif obj.Name == "LiveCodeHint" or obj.Name == "CodeHint" then
+                        highlightBook(obj, Color3.fromRGB(0, 191, 255))
+                    end
+                end
+                task.wait(2)
+            end
+        end)
+    end
+end)
+
+-- [ ОБХОДЫ СИКА И ФИГУРЫ ]
+local SeekBypass = Tabs.Bosses:AddToggle("SeekBypass", {Title = "Легкий Сик (Скорость + Без рук)", Default = true})
+task.spawn(function()
+    while task.wait(0.2) do
+        if Fluent.Toggles.SeekBypass.Value then
+            for _, obj in pairs(workspace:GetDescendants()) do
+                if obj.Name == "SeekMoving" or obj.Name == "SeekSetup" or obj.Name == "Chasers" then
+                    if game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid") then
+                        game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 22
+                    end
+                elseif obj.Name == "SeekHand" or obj.Name == "ChaserHand" or obj.Name == "ChaserFire" then
+                    if obj:IsA("BasePart") then
+                        obj.CanTouch = false
+                        obj.CanCollide = false
+                    end
+                end
+            end
+        end
+    end
+end)
+
+local FastCrouch = Tabs.Bosses:AddToggle("FastCrouch", {Title = "Быстрый шаг сидя (От Фигуры)", Default = true})
+task.spawn(function()
+    while task.wait(0.1) do
+        if Fluent.Toggles.FastCrouch.Value then
+            local char = game.Players.LocalPlayer.Character
+            if char and char:FindFirstChild("Humanoid") then
+                if char.Humanoid.Crouching then
+                    char.Humanoid.WalkSpeed = 19
+                end
+            end
+        end
+    end
+end)
+
+-- [ ЗАЩИТА ]
+local AntiScreech = Tabs.God:AddToggle("AntiScreech", {Title = "Анти-Скрич", Default = true})
+task.spawn(function()
+    while task.wait(0.1) do
+        if Fluent.Toggles.AntiScreech.Value then
+            local camera = workspace.CurrentCamera
+            if camera:FindFirstChild("Screech") then
+                camera.Screech:Destroy()
+            end
+        end
+    end
+end)
+
+local AntiDupe = Tabs.God:AddToggle("AntiDupe", {Title = "Анти-Дюп (Фейк двери)", Default = true})
+task.spawn(function()
+    while task.wait(0.5) do
+        if Fluent.Toggles.AntiDupe.Value then
+            for _, door in pairs(workspace:GetDescendants()) do
+                if door.Name == "DupeDoor" or door.Name == "FakeDoor" then
+                    local collision = door:FindFirstChild("Door") or door:FindFirstChild("Collision")
+                    if collision then collision.CanTouch = false end
+                end
+            end
+        end
+    end
+end)
+
+Window:SelectTab(1)
